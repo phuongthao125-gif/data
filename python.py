@@ -132,4 +132,155 @@ if uploaded_file is not None:
     try:
         df_raw = pd.read_excel(uploaded_file)
         
-        # Tiền xử lý: Đ
+        # Tiền xử lý: Đảm bảo chỉ có 3 cột quan trọng
+        df_raw.columns = ['Chỉ tiêu', 'Năm trước', 'Năm sau']
+        
+        # Xử lý dữ liệu
+        df_processed = process_financial_data(df_raw.copy())
+
+        if df_processed is not None:
+            
+            # ----------------------------------------------------------------------
+            # --- CẬP NHẬT: Gán dữ liệu phân tích vào session state cho Chat ---
+            # ----------------------------------------------------------------------
+            # Chuẩn bị dữ liệu đầy đủ cho bối cảnh Chat
+            current_data_for_chat = df_processed.to_markdown(index=False)
+            if st.session_state.gemini_context != current_data_for_chat:
+                st.session_state.gemini_context = current_data_for_chat
+                # Reset chat session nếu dữ liệu mới được tải lên
+                st.session_state.chat_session = None
+
+            # --- Chức năng 2 & 3: Hiển thị Kết quả ---
+            st.subheader("2. Tốc độ Tăng trưởng & 3. Tỷ trọng Cơ cấu Tài sản")
+            st.dataframe(df_processed.style.format({
+                'Năm trước': '{:,.0f}',
+                'Năm sau': '{:,.0f}',
+                'Tốc độ tăng trưởng (%)': '{:.2f}%',
+                'Tỷ trọng Năm trước (%)': '{:.2f}%',
+                'Tỷ trọng Năm sau (%)': '{:.2f}%'
+            }), use_container_width=True)
+            
+            # --- Chức năng 4: Tính Chỉ số Tài chính ---
+            st.subheader("4. Các Chỉ số Tài chính Cơ bản")
+            
+            thanh_toan_hien_hanh_N = "N/A"
+            thanh_toan_hien_hanh_N_1 = "N/A"
+            try:
+                # Lọc giá trị cho Chỉ số Thanh toán Hiện hành (Ví dụ)
+                
+                # Lấy Tài sản ngắn hạn
+                tsnh_n = df_processed[df_processed['Chỉ tiêu'].str.contains('TÀI SẢN NGẮN HẠN', case=False, na=False)]['Năm sau'].iloc[0]
+                tsnh_n_1 = df_processed[df_processed['Chỉ tiêu'].str.contains('TÀI SẢN NGẮN HẠN', case=False, na=False)]['Năm trước'].iloc[0]
+
+                # Lấy Nợ ngắn hạn (Dùng giá trị giả định hoặc lọc từ file nếu có)
+                no_ngan_han_N = df_processed[df_processed['Chỉ tiêu'].str.contains('NỢ NGẮN HẠN', case=False, na=False)]['Năm sau'].iloc[0]  
+                no_ngan_han_N_1 = df_processed[df_processed['Chỉ tiêu'].str.contains('NỢ NGẮN HẠN', case=False, na=False)]['Năm trước'].iloc[0]
+
+                # Tính toán
+                thanh_toan_hien_hanh_N = tsnh_n / no_ngan_han_N
+                thanh_toan_hien_hanh_N_1 = tsnh_n_1 / no_ngan_han_N_1
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric(
+                        label="Chỉ số Thanh toán Hiện hành (Năm trước)",
+                        value=f"{thanh_toan_hien_hanh_N_1:.2f} lần"
+                    )
+                with col2:
+                    st.metric(
+                        label="Chỉ số Thanh toán Hiện hành (Năm sau)",
+                        value=f"{thanh_toan_hien_hanh_N:.2f} lần",
+                        delta=f"{thanh_toan_hien_hanh_N - thanh_toan_hien_hanh_N_1:.2f}"
+                    )
+                    
+            except IndexError:
+                 st.warning("Thiếu chỉ tiêu 'TÀI SẢN NGẮN HẠN' hoặc 'NỢ NGẮN HẠN' để tính chỉ số.")
+            except ZeroDivisionError:
+                 st.error("Không thể tính chỉ số thanh toán hiện hành do mẫu số (Nợ Ngắn Hạn) bằng 0.")
+                 
+            # --- Chức năng 5: Nhận xét AI (Tự động) ---
+            st.subheader("5. Nhận xét Tình hình Tài chính (AI)")
+            
+            # Chuẩn bị dữ liệu để gửi cho AI
+            data_for_ai = pd.DataFrame({
+                'Chỉ tiêu': [
+                    'Toàn bộ Bảng phân tích (dữ liệu thô)', 
+                    'Tăng trưởng Tài sản ngắn hạn (%)', 
+                    'Thanh toán hiện hành (N-1)', 
+                    'Thanh toán hiện hành (N)'
+                ],
+                'Giá trị': [
+                    df_processed.to_markdown(index=False),
+                    f"{df_processed[df_processed['Chỉ tiêu'].str.contains('TÀI SẢN NGẮN HẠN', case=False, na=False)]['Tốc độ tăng trưởng (%)'].iloc[0]:.2f}%" if thanh_toan_hien_hanh_N != "N/A" else "N/A", 
+                    f"{thanh_toan_hien_hanh_N_1:.2f}" if isinstance(thanh_toan_hien_hanh_N_1, float) else "N/A", 
+                    f"{thanh_toan_hien_hanh_N:.2f}" if isinstance(thanh_toan_hien_hanh_N, float) else "N/A"
+                ]
+            }).to_markdown(index=False) 
+
+            if st.button("Yêu cầu AI Phân tích"):
+                api_key = st.secrets.get("GEMINI_API_KEY") 
+                
+                if api_key:
+                    with st.spinner('Đang gửi dữ liệu và chờ Gemini phân tích...'):
+                        ai_result = get_ai_analysis(data_for_ai, api_key)
+                        st.markdown("**Kết quả Phân tích từ Gemini AI:**")
+                        st.info(ai_result)
+                else:
+                     st.error("Lỗi: Không tìm thấy Khóa API. Vui lòng cấu hình Khóa 'GEMINI_API_KEY' trong Streamlit Secrets.")
+
+            # ----------------------------------------------------------------------
+            # --- BỔ SUNG: Chức năng 6: Khung Chat Hỏi Đáp (Interactive) ---
+            # ----------------------------------------------------------------------
+            st.markdown("---")
+            st.subheader("6. Chat Hỏi Đáp chuyên sâu về Báo cáo Tài chính (Gemini)")
+            
+            api_key = st.secrets.get("GEMINI_API_KEY")
+
+            if not api_key:
+                st.error("Lỗi: Không tìm thấy Khóa API 'GEMINI_API_KEY'. Không thể khởi tạo Chat.")
+            else:
+                # 1. Khởi tạo Chat Session nếu chưa có
+                if st.session_state.chat_session is None:
+                    # Nút để khởi tạo lại nếu người dùng cần
+                    if st.button("Khởi tạo Trợ lý Chat AI"):
+                        initialize_chat_session(api_key, st.session_state.gemini_context)
+                
+                if st.session_state.chat_session:
+                    # 2. Hiển thị lịch sử tin nhắn
+                    for message in st.session_state.messages:
+                        with st.chat_message(message["role"]):
+                            st.markdown(message["content"])
+
+                    # 3. Xử lý input của người dùng
+                    if prompt := st.chat_input("Hỏi về Tốc độ tăng trưởng, tỷ trọng cơ cấu, hoặc bất kỳ chỉ tiêu nào..."):
+                        # Thêm tin nhắn của người dùng vào lịch sử
+                        st.session_state.messages.append({"role": "user", "content": prompt})
+                        with st.chat_message("user"):
+                            st.markdown(prompt)
+
+                        # Gọi API để nhận phản hồi
+                        with st.chat_message("assistant"):
+                            with st.spinner("Gemini đang phân tích và trả lời..."):
+                                try:
+                                    response = st.session_state.chat_session.send_message(prompt)
+                                    st.markdown(response.text)
+                                    # Thêm phản hồi của AI vào lịch sử
+                                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                                except APIError as e:
+                                    error_msg = f"Lỗi gọi Chat API: {e}"
+                                    st.error(error_msg)
+                                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                                except Exception as e:
+                                    error_msg = f"Lỗi không xác định: {e}"
+                                    st.error(error_msg)
+                                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+
+    except ValueError as ve:
+        st.error(f"Lỗi cấu trúc dữ liệu: {ve}")
+        st.session_state.chat_session = None # Đảm bảo chat được reset nếu dữ liệu lỗi
+    except Exception as e:
+        st.error(f"Có lỗi xảy ra khi đọc hoặc xử lý file: {e}. Vui lòng kiểm tra định dạng file.")
+        st.session_state.chat_session = None
+
+else:
+    st.info("Vui lòng tải lên file Excel để bắt đầu phân tích.")
