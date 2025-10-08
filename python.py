@@ -1,15 +1,3 @@
-Chào bạn, với kinh nghiệm triển khai ứng dụng Python trên Streamlit, tôi sẽ giúp bạn tích hợp một **khung chat AI hỏi đáp tài chính** sử dụng mô hình Gemini, cho phép người dùng tương tác trực tiếp với dữ liệu đã được tải lên.
-
-Để làm được điều này, chúng ta cần:
-
-1.  **Khởi tạo lịch sử chat** trong `st.session_state`.
-2.  Tạo **hàm mới** để gọi API Gemini cho chế độ chat.
-3.  **Vòng lặp hiển thị lịch sử** và **khung nhập liệu chat**.
-4.  Gắn dữ liệu đã phân tích vào **ngữ cảnh (context)** của mỗi câu hỏi chat.
-
-Đây là đoạn mã đã được chỉnh sửa:
-
-```python
 import streamlit as st
 import pandas as pd
 from google import genai
@@ -281,43 +269,3 @@ else:
     # Xóa lịch sử chat khi chưa có file để tránh nhầm lẫn
     st.session_state.messages = [] 
     st.session_state.df_processed_for_chat = None
-```
-
------
-
-## Chi tiết các thay đổi chính
-
-### 1\. Khởi tạo `st.session_state`
-
-Thêm các dòng này ở đầu file (sau các hàm định nghĩa) để duy trì lịch sử chat giữa các lần tương tác:
-
-```python
-# --- Khởi tạo State (Quan trọng cho Chat) ---
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-# Biến để lưu trữ dữ liệu phân tích cho Chat Context
-if "df_processed_for_chat" not in st.session_state:
-    st.session_state.df_processed_for_chat = None
-```
-
-### 2\. Hàm Chat API Mới: `chat_with_gemini`
-
-Hàm này sử dụng `client.models.generate_content` nhưng xây dựng một **lịch sử hội thoại (history)** bao gồm cả **System Instruction** và **dữ liệu phân tích** (`full_context`) để đảm bảo Gemini luôn có ngữ cảnh của bảng phân tích khi trả lời.
-
-### 3\. Lưu trữ Dữ liệu Phân tích cho Chat Context
-
-Ngay sau khi `df_processed` được tính toán thành công, ta lưu nó dưới dạng Markdown vào `session_state` để tái sử dụng làm ngữ cảnh (context) cho hàm chat:
-
-```python
-# LƯU TRỮ DỮ LIỆU ĐÃ XỬ LÝ VÀO SESSION STATE CHO CHAT
-st.session_state.df_processed_for_chat = df_processed.to_markdown(index=False)
-```
-
-### 4\. Khung Chat Hỏi đáp (Chức năng 6)
-
-Đây là phần giao diện chính:
-
-  * Sử dụng `st.chat_message` để hiển thị lịch sử chat đã lưu trong `st.session_state.messages`.
-  * Sử dụng `st.chat_input` để lấy câu hỏi mới từ người dùng.
-  * Khi người dùng nhập câu hỏi (`if prompt := st.chat_input(...)`), câu hỏi được thêm vào lịch sử và gửi đến hàm `chat_with_gemini` cùng với `full_context` (dữ liệu phân tích).
-  * Câu trả lời của AI được hiển thị và lưu lại vào lịch sử chat.
