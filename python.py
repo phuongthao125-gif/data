@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 from google import genai
 from google.genai.errors import APIError
+from google.genai.types import Content, Part # Thêm import cần thiết
 
 # --- Cấu hình Trang Streamlit ---
 st.set_page_config(
@@ -14,7 +15,7 @@ st.set_page_config(
 st.title("Ứng dụng Phân Tích Báo Cáo Tài chính 📊")
 
 # --- Khởi tạo State (Quan trọng cho Lịch sử Chat) ---
-# Chỉ lưu lịch sử tin nhắn và bối cảnh dữ liệu, KHÔNG lưu đối tượng chat_session
+# Chỉ lưu lịch sử tin nhắn và bối cảnh dữ liệu.
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "gemini_context" not in st.session_state:
@@ -53,7 +54,6 @@ def process_financial_data(df):
     return df
 
 # --- Hàm gọi API Gemini cho Nhận xét Tự động (Chức năng 5) ---
-# Hàm này khởi tạo client, sử dụng và kết thúc, tránh lỗi client đóng
 def get_ai_analysis(data_for_ai, api_key):
     """Gửi dữ liệu phân tích đến Gemini API và nhận nhận xét."""
     try:
@@ -182,7 +182,7 @@ if uploaded_file is not None:
 
             # ----------------------------------------------------------------------
             # --- Chức năng 6: Khung Chat Hỏi Đáp (Interactive) ---
-            # --- Đã sửa lỗi "client has been closed" bằng cách tái tạo session ---
+            # --- Đã sửa lỗi Pydantic validation bằng cách sử dụng Content object ---
             # ----------------------------------------------------------------------
             st.markdown("---")
             st.subheader("6. Chat Hỏi Đáp chuyên sâu về Báo cáo Tài chính (Gemini)")
@@ -199,60 +199,6 @@ if uploaded_file is not None:
 
                 # 2. Xử lý input của người dùng
                 if prompt := st.chat_input("Hỏi về Tốc độ tăng trưởng, tỷ trọng cơ cấu, hoặc bất kỳ chỉ tiêu nào..."):
-                    # Thêm tin nhắn của người dùng vào lịch sử
-                    st.session_state.messages.append({"role": "user", "content": prompt})
                     
-                    with st.chat_message("user"):
-                        st.markdown(prompt)
-
-                    # 3. Gọi API để nhận phản hồi (Tái tạo Client và Session trước mỗi lần gửi)
-                    with st.chat_message("assistant"):
-                        with st.spinner("Gemini đang phân tích và trả lời..."):
-                            try:
-                                # **Khắc phục lỗi Client Closed:** Tái tạo Client và Session trước mỗi lần sử dụng
-                                client = genai.Client(api_key=api_key)
-                                
-                                system_instruction = f"""
-                                Bạn là một Trợ lý phân tích tài chính thông minh dựa trên mô hình Gemini.
-                                Nhiệm vụ của bạn là trả lời các câu hỏi của người dùng dựa trên dữ liệu Báo cáo Tài chính đã được phân tích sau đây.
-                                Hãy sử dụng dữ liệu này làm bối cảnh chính cho mọi câu trả lời. Trả lời bằng tiếng Việt.
-                                
-                                Dữ liệu Báo cáo Tài chính đã phân tích:
-                                {st.session_state.gemini_context}
-                                """
-                                
-                                # Tái tạo Chat Session, truyền lịch sử cũ để duy trì ngữ cảnh
-                                chat_session = client.chats.create(
-                                    model='gemini-2.5-flash',
-                                    history=st.session_state.messages, 
-                                    config={"system_instruction": system_instruction}
-                                )
-                                
-                                # Gửi tin nhắn mới nhất
-                                response = chat_session.send_message(prompt) 
-                                
-                                st.markdown(response.text)
-                                # Thêm phản hồi của AI vào lịch sử
-                                st.session_state.messages.append({"role": "assistant", "content": response.text})
-                                
-                            except APIError as e:
-                                error_msg = f"Lỗi gọi Chat API: Vui lòng kiểm tra Khóa API hoặc giới hạn sử dụng. Chi tiết lỗi: {e}"
-                                st.error(error_msg)
-                                st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                            except Exception as e:
-                                error_msg = f"Lỗi không xác định: {e}"
-                                st.error(error_msg)
-                                st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                                
-                    # Quan trọng: Kích hoạt rerun để cập nhật khung chat ngay lập tức
-                    st.rerun()
-
-    except ValueError as ve:
-        st.error(f"Lỗi cấu trúc dữ liệu: {ve}")
-        st.session_state.messages = []
-    except Exception as e:
-        st.error(f"Có lỗi xảy ra khi đọc hoặc xử lý file: {e}. Vui lòng kiểm tra định dạng file.")
-        st.session_state.messages = []
-
-else:
-    st.info("Vui lòng tải lên file Excel để bắt đầu phân tích.")
+                    # Thêm tin nhắn của người dùng vào lịch sử (Định dạng Dict)
+                    st.session_state.messages
