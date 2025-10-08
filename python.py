@@ -228,60 +228,7 @@ if uploaded_file is not None:
                 else:
                      st.error("Lỗi: Không tìm thấy Khóa API. Vui lòng cấu hình Khóa 'GEMINI_API_KEY' trong Streamlit Secrets.")
 
-            # ----------------------------------------------------------------------
-            # --- BỔ SUNG: Chức năng 6: Khung Chat Hỏi Đáp (Interactive) ---
-            # ----------------------------------------------------------------------
-            st.markdown("---")
-            st.subheader("6. Chat Hỏi Đáp chuyên sâu về Báo cáo Tài chính (Gemini)")
-            
-            api_key = st.secrets.get("GEMINI_API_KEY")
-
-            if not api_key:
-                st.error("Lỗi: Không tìm thấy Khóa API 'GEMINI_API_KEY'. Không thể khởi tạo Chat.")
-            else:
-                # 1. Khởi tạo Chat Session nếu chưa có
-                if st.session_state.chat_session is None:
-                    # Nút để khởi tạo lại nếu người dùng cần
-                    if st.button("Khởi tạo Trợ lý Chat AI"):
-                        initialize_chat_session(api_key, st.session_state.gemini_context)
-                
-                if st.session_state.chat_session:
-                    # 2. Hiển thị lịch sử tin nhắn
-                    for message in st.session_state.messages:
-                        with st.chat_message(message["role"]):
-                            st.markdown(message["content"])
-
-                    # 3. Xử lý input của người dùng
-                    if prompt := st.chat_input("Hỏi về Tốc độ tăng trưởng, tỷ trọng cơ cấu, hoặc bất kỳ chỉ tiêu nào..."):
-                        # Thêm tin nhắn của người dùng vào lịch sử
-                        st.session_state.messages.append({"role": "user", "content": prompt})
-                        with st.chat_message("user"):
-                            st.markdown(prompt)
-
-                        # Gọi API để nhận phản hồi
-                        with st.chat_message("assistant"):
-                            with st.spinner("Gemini đang phân tích và trả lời..."):
-                                try:
-                                    response = st.session_state.chat_session.send_message(prompt)
-                                    st.markdown(response.text)
-                                    # Thêm phản hồi của AI vào lịch sử
-                                    st.session_state.messages.append({"role": "assistant", "content": response.text})
-                                except APIError as e:
-                                    error_msg = f"Lỗi gọi Chat API: {e}"
-                                    st.error(error_msg)
-                                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                                except Exception as e:
-                                    error_msg = f"Lỗi không xác định: {e}"
-                                    st.error(error_msg)
-                                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
-
-    except ValueError as ve:
-        st.error(f"Lỗi cấu trúc dữ liệu: {ve}")
-        st.session_state.chat_session = None # Đảm bảo chat được reset nếu dữ liệu lỗi
-    except Exception as e:
-        st.error(f"Có lỗi xảy ra khi đọc hoặc xử lý file: {e}. Vui lòng kiểm tra định dạng file.")
-        st.session_state.chat_session = None
-        # ----------------------------------------------------------------------
+           # ----------------------------------------------------------------------
 # --- Chức năng 6: Khung Chat Hỏi Đáp (Interactive) ---
 # ----------------------------------------------------------------------
 st.markdown("---")
