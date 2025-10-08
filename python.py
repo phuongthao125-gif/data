@@ -281,6 +281,74 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"Có lỗi xảy ra khi đọc hoặc xử lý file: {e}. Vui lòng kiểm tra định dạng file.")
         st.session_state.chat_session = None
+        # ----------------------------------------------------------------------
+# --- Chức năng 6: Khung Chat Hỏi Đáp (Interactive) ---
+# ----------------------------------------------------------------------
+st.markdown("---")
+st.subheader("6. Chat Hỏi Đáp chuyên sâu về Báo cáo Tài chính (Gemini)")
+
+api_key = st.secrets.get("GEMINI_API_KEY")
+
+if not api_key:
+    st.error("Lỗi: Không tìm thấy Khóa API 'GEMINI_API_KEY'. Không thể khởi tạo Chat.")
+else:
+    # 1. Hiển thị lịch sử tin nhắn
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # 2. Xử lý input của người dùng
+    if prompt := st.chat_input("Hỏi về Tốc độ tăng trưởng, tỷ trọng cơ cấu, hoặc bất kỳ chỉ tiêu nào..."):
+        # Thêm tin nhắn của người dùng vào lịch sử
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # 3. Gọi API để nhận phản hồi (Tạo Client và Session NGAY TẠI ĐÂY)
+        with st.chat_message("assistant"):
+            with st.spinner("Gemini đang phân tích và trả lời..."):
+                try:
+                    # Tái tạo Client và Session trước mỗi lần sử dụng
+                    client = genai.Client(api_key=api_key)
+                    
+                    system_instruction = f"""
+                    Bạn là một Trợ lý phân tích tài chính thông minh dựa trên mô hình Gemini.
+                    Nhiệm vụ của bạn là trả lời các câu hỏi của người dùng dựa trên dữ liệu Báo cáo Tài chính đã được phân tích sau đây.
+                    Hãy sử dụng dữ liệu này làm bối cảnh chính cho mọi câu trả lời. Trả lời bằng tiếng Việt.
+                    
+                    Dữ liệu Báo cáo Tài chính đã phân tích:
+                    {st.session_state.gemini_context}
+                    """
+                    
+                    # Tái tạo Chat Session, cung cấp lịch sử cũ
+                    chat_session = client.chats.create(
+                        model='gemini-2.5-flash',
+                        history=st.session_state.messages, # Truyền lịch sử cũ vào
+                        config={"system_instruction": system_instruction}
+                    )
+                    
+                    # Gửi tin nhắn mới nhất
+                    # Lấy tin nhắn người dùng cuối cùng (tin nhắn trước đó trong history đã bao gồm)
+                    response = chat_session.send_message(prompt) 
+                    
+                    st.markdown(response.text)
+                    # Thêm phản hồi của AI vào lịch sử
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                    
+                except APIError as e:
+                    error_msg = f"Lỗi gọi Chat API: Vui lòng kiểm tra Khóa API hoặc giới hạn sử dụng. Chi tiết lỗi: {e}"
+                    st.error(error_msg)
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                except Exception as e:
+                    error_msg = f"Lỗi không xác định: {e}"
+                    st.error(error_msg)
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    
+        # Rerun để hiển thị tin nhắn mới
+        st.rerun()
+
+# ----------------------------------------------------------------------
 
 else:
     st.info("Vui lòng tải lên file Excel để bắt đầu phân tích.")
